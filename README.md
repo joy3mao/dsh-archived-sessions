@@ -21,7 +21,7 @@ DSH 的客户端 UI 插槽体系里，侧边栏外壳只对外暴露 3 个插槽
 - **窄条模式**（侧边栏收起时）：退化为一个归档图标按钮，点击会重新展开侧边栏。
 
 
-## 安装（先不要执行，确认后再装）
+## 安装
 
 安装 = 两步：把插件装进 profile（`dsh plugin add` 会把本目录以 `file:` 依赖加入 `~/.dsh/profiles/web/package.json`），再在 `cordis.patch.yml` 里启用它。
 
@@ -75,11 +75,4 @@ dsh plugin --profile web add file:/Users/maohuan/deepseekPrj/plugins/dsh-archive
 4. **专用 `/archived` 通道**：插件挂载自己的 HTTP 通道，随插件 fiber 装载/卸载；与 `dsh-api-gateway` 的 `/api` 无冲突。
 5. **窄条模式**只提供入口按钮（展开侧边栏），不渲染列表。
 
-## 验证（不安装）
 
-```bash
-node --check lib/index.js && node --check lib/client.js
-node /Users/maohuan/deepseekPrj/verify/verify-archived-sessions.mjs
-```
-
-验证脚本用 `@deepseek-ai/*` 真实包 + 临时 HOME 目录构造最小 cordis 上下文，覆盖：专用 `/archived` 通道挂载与端点路由、参数校验、restore 幂等与持久化、delete 拒绝附着会话、delete 清理产物与索引、domain/changed 广播。它不触碰真实 profile 数据。
