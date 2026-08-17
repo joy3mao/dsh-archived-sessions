@@ -1,0 +1,11 @@
+# 示例：把 dsh-archived-sessions 加入 ~/.dsh/profiles/web/cordis.patch.yml
+#
+# 复制下面这段到该文件末尾（与 better-sidebar 的插法一致）。注意：
+# 1) 先执行 `dsh plugin --profile web add file:/Users/maohuan/deepseekPrj/plugins/dsh-archived-sessions`
+#    把包装进 profile（写入 package.json 的 file: 依赖）；
+# 2) 再插入本段；3) 重启 dsh web（或等 HMR）生效。
+
+- insert:
+    # Archived-session manager: sidebar footer section with restore/delete.
+    - id: archived-sessions
+      name: 'dsh-archived-sessions'
