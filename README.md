@@ -1,44 +1,50 @@
 # dsh-archived-sessions
 
-归档会话管理插件（DeepSeek Harness / dsh web shell 用户插件）。
+<div align="center">
 
-在左侧工作区下方的侧边栏底部分栏新增「已归档」栏目，按工作区分组列出所有归档会话。每个会话条目的交互与工作区列表一致：鼠标悬停出现「…」按钮，点击弹出操作菜单，提供两个操作：
+[🇺🇸 **English**](README.md) ・ [🇨🇳 **中文**](README.zh-CN.md)
 
-- **恢复** —— 将会话恢复到其工作区（保留原位置），与内置「归档」互为逆操作；
-- **删除** —— 彻底删除该会话（日志文件 + 注册表索引 + 工作区槽位 + 归档标记，不可恢复），以红色危险项展示，点击后弹窗二次确认。
+</div>
 
-> ℹ️ 本目录是插件源码。若尚未安装，按下方「安装」步骤执行；若已安装，升级时重新执行 `dsh plugin add`（`file:` 依赖会刷新）并重启 `dsh web`。
+---
 
-## 界面形态与设计取舍
+Archived-session manager plugin (DeepSeek Harness / dsh web shell user plugin).
 
-DSH 的客户端 UI 插槽体系里，侧边栏外壳只对外暴露 3 个插槽：`sidebar.workspaces`（被内置工作区浏览器整体占用）、`sidebar.settings`、`sidebar.footer.action`（列表型，渲染在侧边栏底部、设置按钮上方）。工作区浏览器内部没有可注入的分区，且其运行时组件未随包导出，无法在浏览器内部插入子栏目。
+Adds an "Archived" section to the sidebar's bottom panel below the workspace area, listing all archived sessions grouped by workspace. Each session row behaves like the workspace list: hovering reveals a "…" button that opens an action menu with two actions:
 
-因此本插件把「已归档」栏目挂到 `sidebar.footer.action`：
+- **Restore** — restores the session to its workspace (keeping its original position), the inverse of the built-in "Archive";
+- **Delete** — permanently deletes the session (log file + registry index + workspace slot + archive flag; unrecoverable), shown as a red danger item with a confirmation modal.
 
-![截图](./snap.png)
+> ℹ️ This directory is the plugin source. If you haven't installed it yet, follow the "Installation" steps below; if already installed, re-run `dsh plugin add` (the `file:` dependency refreshes) and restart `dsh web` to upgrade.
 
-- **宽模式**：渲染一个可展开/收起的「已归档」区块，位于工作区浏览区域下方、设置行上方，内部按工作区分组列出归档会话（未归属工作区的会话归入「未分组」）。会话条目复用 `@deepseek-ai/dsh-client-ui-primitives` 的 `Menu`/`Modal`：悬停显示「…」（`IconEllipsisOutline16`），点击弹出菜单（恢复 / 删除，删除为 `danger` 红色项 + `Modal` 二次确认），与工作区会话行的交互保持一致；
-- **窄条模式**（侧边栏收起时）：退化为一个归档图标按钮，点击会重新展开侧边栏。
+## UI design & trade-offs
 
+The DSH client UI slot system exposes only 3 slots on the sidebar shell: `sidebar.workspaces` (fully occupied by the built-in workspace browser), `sidebar.settings`, and `sidebar.footer.action` (a list slot rendered at the bottom of the sidebar, above the settings button). The workspace browser has no injectable regions, and its runtime components are not exported with the package, so no sub-sections can be inserted inside it.
 
-## 安装
+This plugin therefore mounts the "Archived" section onto `sidebar.footer.action`:
 
-安装 = 两步：把插件装进 profile（`dsh plugin add` 会把本目录以 `file:` 依赖加入 `~/.dsh/profiles/web/package.json`），再在 `cordis.patch.yml` 里启用它。
+![Screenshot](./snap.png)
 
-**方式一：从 Git 安装（推荐）**
+- **Wide mode**: renders a collapsible "Archived" block below the workspace browsing region and above the settings row, listing archived sessions grouped by workspace (sessions not belonging to any workspace go under "Ungrouped"). Session rows reuse `@deepseek-ai/dsh-client-ui-primitives`'s `Menu`/`Modal`: hovering reveals a "…" (`IconEllipsisOutline16`) button, clicking opens a menu (Restore / Delete, Delete being a red `danger` item with `Modal` confirmation), matching the workspace session rows' interactions;
+- **Rail mode** (sidebar collapsed): degrades to a single archive icon button that re-opens the sidebar on click.
+
+## Installation
+
+Installation = two steps: install the plugin into the profile (`dsh plugin add` adds this directory as a `file:` dependency in `~/.dsh/profiles/web/package.json`), then enable it in `cordis.patch.yml`.
+
+**Option 1: Install from Git (recommended)**
 
 ```bash
 dsh plugin --profile web add github:joy3mao/dsh-archived-sessions
 ```
 
-**方式二：本地目录安装**
+**Option 2: Install from a local directory**
 
 ```bash
 dsh plugin --profile web add /file-path/dsh-archived-sessions
 ```
 
-
-然后在 `~/.dsh/profiles/web/cordis.patch.yml` 末尾追加（格式见同目录 `cordis.patch.example.yml`）：
+Then append the following at the end of `~/.dsh/profiles/web/cordis.patch.yml` (format: see `cordis.patch.example.yml` in the same directory):
 
 ```yaml
 - insert:
@@ -47,29 +53,28 @@ dsh plugin --profile web add /file-path/dsh-archived-sessions
       name: 'dsh-archived-sessions'
 ```
 
-重启 `dsh web`（或触发 HMR）后生效。卸载：删除上面两处并执行 `dsh plugin --profile web remove dsh-archived-sessions`。
+Restart `dsh web` (or trigger HMR) for it to take effect. To uninstall: remove both of the above and run `dsh plugin --profile web remove dsh-archived-sessions`.
 
-## 工作原理
+## How it works
 
-### Host （`lib/index.js`）
+### Host (`lib/index.js`)
 
-- 通过 `ctx.connection.rpc.handle('/archived', ...)` 挂载**专用通道**（`authority: 'trusted-host'`，仅接受已连接 Web 客户端的请求），上面有两个端点：
-  - `restore` —— 从 workspace 域的 `archivedSessionIds` 中移除该会话。
-  - `delete` —— 彻底删除。
-- 为什么不用共享的 `/api`：`/api` 通道被 `dsh-api-gateway` 独占（其拦截器分发所有内置 RPC），且 Connection 只允许一个 `/api` 拦截器；`rpc.handle` 挂载私有通道，不与网关冲突。
-- **恢复**走 `WorkspaceRegistry.enqueueOperation → setState`：与内置归档共用同一条写入序列（`operationTail` 串行化 + `recoverPendingMutation` 回放），`setState` 内部先持久化（`domain.global.set`）再刷新注册表内存缓存，并自然触发 `domain/changed` → host 流广播 `host/archived-sessions-changed`，客户端实时更新——**不需要任何私有字段 hack**。
-- **删除**按序执行：
-  1. 若会话仍附着在内存 `SessionStore`（`ctx.sessions.get(id)` 命中）→ 拒绝（`internal` 错误）。harness 没有任何会话销毁 API，删掉运行中会话的日志文件会破坏其下一次追加；
-  2. 删除持久化产物：`sessionPersistence.locate()` 定位 `session.jsonl(.zstd)`，同时清理另一种压缩后缀的孪生文件，目录清空则一并删除；
-  3. 清理注册表内存索引（`headers` / `sessionPaths` / `invalidSessionPaths`），使 `sessionKnown` 等判定为确定未命中；
-  4. 从归属工作区的 `sessionIds` 槽位摘除（`WorkspaceEntity.detachSession`，持久化并广播 `host/workspace-changed`）；
-  5. 从 `archivedSessionIds` 移除（同恢复的写入序列）。
+- Mounts a **dedicated channel** via `ctx.connection.rpc.handle('/archived', ...)` (`authority: 'trusted-host'` — only accepts requests from connected web clients), serving two endpoints:
+  - `restore` — removes the session from the workspace domain's `archivedSessionIds`.
+  - `delete` — permanently deletes.
+- Why not the shared `/api`: the `/api` channel is owned by `dsh-api-gateway` (its interceptor dispatches every built-in RPC), and Connection exposes only ONE `/api` interceptor; `rpc.handle` mounts a private channel that never collides with the gateway.
+- **Restore** goes through `WorkspaceRegistry.enqueueOperation → setState`: it shares the same write serialization as the built-in archive (`operationTail` serialization + `recoverPendingMutation` replay). `setState` persists first (`domain.global.set`) then refreshes the registry's in-memory cache, and naturally emits `domain/changed` → the host stream broadcasts `host/archived-sessions-changed`, updating clients in real time — **no private-field hacks needed**.
+- **Delete** runs in order:
+  1. If the session is still attached to the in-memory `SessionStore` (`ctx.sessions.get(id)` hits) → refuse (`internal` error). The harness has no session-destruction API; deleting a running session's log file would corrupt its next append;
+  2. Remove persisted artifacts: `sessionPersistence.locate()` finds `session.jsonl(.zstd)`, also cleaning the twin file with the other compression suffix, and removing the directory too once it is empty;
+  3. Clear the registry's in-memory indexes (`headers` / `sessionPaths` / `invalidSessionPaths`), so lookups like `sessionKnown` definitely miss;
+  4. Remove the session from its owning workspace's `sessionIds` slot (`WorkspaceEntity.detachSession`, persisted and broadcasting `host/workspace-changed`);
+  5. Remove it from `archivedSessionIds` (same write serialization as restore).
 
+## Known limitations
 
-## 已知限制
-
-1. **正在运行的会话不能删除**：`agent.phase.kind !== 'idle'`（running / maintenance）时拒绝删除，这是安全底线——正在写日志的会话删掉文件会破坏写路径。归档后**空闲**的会话（常见的「归档后立刻删除」场景）会被先 flush、再从内存摘除后删除，可正常删除。误删运行中的会话会得到明确的中文错误提示。
-2. **持久化残留**：删除只清理会话日志文件与其目录；若未来出现 projection 缓存、telemetry 等独立存储，需另行扩展（本版本未发现独立残留文件）。
-3. **`registry.headers` 等内存索引 + `ctx.sessions.store` 为内部字段**：删除流程会直接 `.delete()` 注册表索引、并调用 `SessionStore.store` 条目的 `detach()`（触发 `session/disposed` → 持久化写控制器 retire），依赖 `dsh-workspace` / `dsh-session` 当前字段名，属脆弱点；恢复流程则完全走公开 API，无此问题。
-4. **专用 `/archived` 通道**：插件挂载自己的 HTTP 通道，随插件 fiber 装载/卸载；与 `dsh-api-gateway` 的 `/api` 无冲突。
-5. **窄条模式**只提供入口按钮（展开侧边栏），不渲染列表。
+1. **Running sessions cannot be deleted**: deletion is refused while `agent.phase.kind !== 'idle'` (running / maintenance) — this is the safety floor, since deleting a file whose log is being written would corrupt the write path. **Idle** archived sessions (the common "archive then delete" case) are flushed, detached from memory, and then deleted normally. Attempting to delete a running session yields an explicit error message.
+2. **Persistence residue**: deletion only cleans the session log file and its directory; if independent storage such as projection caches or telemetry appears later, it must be extended separately (no independent residue files were found in this version).
+3. **`registry.headers` and other in-memory indexes + `ctx.sessions.store` are internal fields**: the delete flow directly `.delete()`s registry indexes and calls `detach()` on the `SessionStore.store` entry (triggering `session/disposed` → persistence write-controller retire), depending on the current `dsh-workspace` / `dsh-session` field names — a fragile point; the restore flow goes entirely through public APIs and has no such issue.
+4. **Dedicated `/archived` channel**: the plugin mounts its own HTTP channel, loaded/unloaded with the plugin fiber; no conflict with `dsh-api-gateway`'s `/api`.
+5. **Rail mode** only provides an entry button (expands the sidebar), no list rendering.
