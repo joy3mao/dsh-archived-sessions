@@ -38,7 +38,7 @@ dsh plugin --profile web add /file-path/dsh-archived-sessions
 ```
 
 
-然后在 `~/.dsh/profiles/web/cordis.patch.yml` 末尾追加（格式与 `better-sidebar` 相同，见同目录 `cordis.patch.example.yml`）：
+然后在 `~/.dsh/profiles/web/cordis.patch.yml` 末尾追加（格式见同目录 `cordis.patch.example.yml`）：
 
 ```yaml
 - insert:
