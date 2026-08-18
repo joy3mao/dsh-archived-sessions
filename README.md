@@ -25,9 +25,18 @@ DSH 的客户端 UI 插槽体系里，侧边栏外壳只对外暴露 3 个插槽
 
 安装 = 两步：把插件装进 profile（`dsh plugin add` 会把本目录以 `file:` 依赖加入 `~/.dsh/profiles/web/package.json`），再在 `cordis.patch.yml` 里启用它。
 
+**方式一：从 Git 安装（推荐）**
+
 ```bash
-dsh plugin --profile web add file:/Users/maohuan/deepseekPrj/plugins/dsh-archived-sessions
+dsh plugin --profile web add github:joy3mao/dsh-archived-sessions
 ```
+
+**方式二：本地目录安装**
+
+```bash
+dsh plugin --profile web add /file-path/dsh-archived-sessions
+```
+
 
 然后在 `~/.dsh/profiles/web/cordis.patch.yml` 末尾追加（格式与 `better-sidebar` 相同，见同目录 `cordis.patch.example.yml`）：
 
@@ -42,7 +51,7 @@ dsh plugin --profile web add file:/Users/maohuan/deepseekPrj/plugins/dsh-archive
 
 ## 工作原理
 
-### Host 半（`lib/index.js`）
+### Host （`lib/index.js`）
 
 - 通过 `ctx.connection.rpc.handle('/archived', ...)` 挂载**专用通道**（`authority: 'trusted-host'`，仅接受已连接 Web 客户端的请求），上面有两个端点：
   - `restore` —— 从 workspace 域的 `archivedSessionIds` 中移除该会话。
@@ -56,16 +65,6 @@ dsh plugin --profile web add file:/Users/maohuan/deepseekPrj/plugins/dsh-archive
   4. 从归属工作区的 `sessionIds` 槽位摘除（`WorkspaceEntity.detachSession`，持久化并广播 `host/workspace-changed`）；
   5. 从 `archivedSessionIds` 移除（同恢复的写入序列）。
 
-### Client 半（`lib/client.js`）
-
-- 无构建步骤：手写 `window.__ModuleLoader__.load({ id, factory })` 包络（与 tsdown 产物同形），随包 `./client` 导出由 `client-modules` 原样伺服。
-- `apply` 注册字典（zh/en）、注入样式、`ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({...}, ArchivedSection))`。
-- 组件用标准 kit（`useSessions` / `useWorkspaces` / `t`）+ owner prop `wide`，通过 `ctx.connection.rpc.call('/archived', 'restore'|'delete', { sessionId })` 调 host；删除成功后调用 `ctx.sessions.refresh()` 把会话从本地列表摘除。
-
-### 依赖声明（`package.json`）
-
-- 两半都**只通过 `ctx.*` 访问 harness 服务，不 `import` 任何 `@deepseek-ai/*` 符号**：host 半只用 `node:fs`/`node:path`，client 半是手写 module-loader 包络。
-- 因此 `@deepseek-ai/*` 一律放 **`peerDependencies`** 而非 `dependencies`。原因：profile 以 `nodeLinker: hoisted` + `autoInstallPeers: false` 安装，`dependencies` 会把核心包（如 `dsh-client-connection` → `dsh-tools`/`dsh-session`/`dsh-llm`）**物理复制**进 `~/.dsh/profiles/web/node_modules`，使 cordis loader 从副本解析核心服务，产生第二份模块级 `Symbol`/类，运行时表现为 `Cannot read properties of undefined (reading 'prepare')` 一类错误。`peerDependencies` 配合 `autoInstallPeers: false` 不会被复制，直接复用 harness 根已有的包（与 `dsh-better-sidebar` 的声明方式一致）。
 
 ## 已知限制
 
@@ -74,5 +73,3 @@ dsh plugin --profile web add file:/Users/maohuan/deepseekPrj/plugins/dsh-archive
 3. **`registry.headers` 等内存索引 + `ctx.sessions.store` 为内部字段**：删除流程会直接 `.delete()` 注册表索引、并调用 `SessionStore.store` 条目的 `detach()`（触发 `session/disposed` → 持久化写控制器 retire），依赖 `dsh-workspace` / `dsh-session` 当前字段名，属脆弱点；恢复流程则完全走公开 API，无此问题。
 4. **专用 `/archived` 通道**：插件挂载自己的 HTTP 通道，随插件 fiber 装载/卸载；与 `dsh-api-gateway` 的 `/api` 无冲突。
 5. **窄条模式**只提供入口按钮（展开侧边栏），不渲染列表。
-
-
